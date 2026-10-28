@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moon Tuition – ISEB Mock Platform</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,sans-serif;background:#f1f5f9;margin:0;color:#0f172a}
+header{background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 24px;display:flex;align-items:center;gap:10px}
+.logo{font-weight:700;font-size:1.25rem}
+main{max-width:800px;margin:24px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px}
+h1,h2{margin:0 0 12px}
+input,select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 14px;font-size:1rem}
+.btn{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px 22px;cursor:pointer;font-size:1rem}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sec{background:#64748b}
+.opt{border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;margin:6px 0;cursor:pointer}
+.opt:hover{border-color:#2563eb}
+.opt.selected{border-color:#2563eb;background:#eff6ff}
+.opt.correct{border-color:#16a34a;background:#f0fdf4}
+.opt.wrong{border-color:#dc2626;background:#fef2f2}
+.progress{height:6px;background:#e2e8f0;border-radius:3px;margin:8px 0}
+.progress-fill{height:100%;background:#2563eb;transition:width .3s}
+.timer{font-weight:700;color:#dc2626}
+.nav a{margin-left:16px;color:#2563eb;text-decoration:none;cursor:pointer}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <span style="font-size:1.5rem">🌙</span>
+  <span class="logo">Moon Tuition</span>
+  <div id="nav" class="nav" style="margin-left:auto"></div>
+</header>
+<main id="app"></main>
+<script>
+const ADMIN = {username:"moonzhu", password:"moonprep"};
+let users = JSON.parse(localStorage.getItem("mt_users") || "{}");
+if (!users[ADMIN.username]) users[ADMIN.username] = {password:ADMIN.password, role:"admin", name:"Admin"};
+function saveUsers(){localStorage.setItem("mt_users", JSON.stringify(users));}
+let currentUser = null;
+let currentSubject = null;
+let questions = [];
+let currentIndex = 0;
+let userAnswers = [];
+let score = 0;
+let timer = null;
+let timeLeft = 900;
+
+// 30 Maths – authentic ISEB style
+const mathsQ = [
+  {q:"A charity wants to raise £100,000. They have already raised £68,000. How much more do they need?", opts:["£32,000","£38,000","£42,000","£68,000","£93,200"], a:0},
+  {q:"Of 450 pupils, three-fifths wear school uniform. The rest wear PE kit. How many wear PE kit?", opts:["90","150","180","270","360"], a:2},
+  {q:"A bucket holds 2,000 ml. It leaks 250 ml every minute. How many minutes until empty?", opts:["4","8","40","64","80"], a:1},
+  {q:"A game was £75 and is reduced by 20%. What is the new price?", opts:["£15","£55","£60","£65","£67.50"], a:2},
+  {q:"A train leaves at 18:52 and arrives at 21:06. How long is the journey?", opts:["74 min","114 min","134 min","214 min","226 min"], a:2},
+  {q:"Bells ring every 10 s, 20 s and 3 s. When will they next all ring together?", opts:["30 s","33 s","40 s","50 s","60 s"], a:4},
+  {q:"A race is 13.5 km. Fiona has run 11.4 km. How much further in metres?", opts:["21 m","1.9 m","210 m","1,900 m","2,100 m"], a:4},
+  {q:"Cuboid volume 126 cm³. Edges 7 cm and 3 cm. Find the third edge.", opts:["5 cm","6 cm","10 cm","42 cm","116 cm"], a:1},
+  {q:"What is 25% of 240?", opts:["50","60","70","80","90"], a:1},
+  {q:"A rectangle is 12 cm by 8 cm. What is its area?", opts:["20 cm²","40 cm²","96 cm²","192 cm²","960 cm²"], a:2},
+  {q:"3/4 of 200 = ?", opts:["100","120","150","175","180"], a:2},
+  {q:"A shop buys 40 pens at 50p each and sells them at 75p. What is the total profit?", opts:["£5","£8","£10","£12","£15"], a:2},
+  {q:"Convert 3.5 kg to grams.", opts:["350 g","3,500 g","35,000 g","350,000 g","35 g"], a:1},
+  {q:"The sum of three consecutive numbers is 48. What is the middle number?", opts:["15","16","17","18","19"], a:1},
+  {q:"A car travels 120 km in 2 hours. What is its average speed?", opts:["40 km/h","50 km/h","60 km/h","70 km/h","80 km/h"], a:2},
+  {q:"What is the perimeter of a square with side 9 cm?", opts:["18 cm","27 cm","36 cm","45 cm","81 cm"], a:2},
+  {q:"2/5 of a number is 18. What is the number?", opts:["30","36","40","45","50"], a:3},
+  {q:"A book costs £8.50. How much for 6 books?", opts:["£48","£49","£50","£51","£52"], a:3},
+  {q:"The temperature rises from −3°C to 7°C. What is the rise?", opts:["4°C","7°C","10°C","11°C","14°C"], a:2},
+  {q:"A triangle has angles 50° and 70°. What is the third angle?", opts:["40°","50°","60°","70°","80°"], a:2},
+  {q:"What is 15% of 80?", opts:["8","10","12","15","20"], a:2},
+  {q:"A bottle holds 1.5 litres. How many 250 ml glasses can be filled?", opts:["4","5","6","7","8"], a:2},
+  {q:"The mean of 4, 6, 8 and x is 7. What is x?", opts:["6","8","10","12","14"], a:2},
+  {q:"A rectangle has length 15 cm and width 6 cm. What is its perimeter?", opts:["21 cm","42 cm","45 cm","90 cm","180 cm"], a:1},
+  {q:"3 × 4 + 2 × 5 = ?", opts:["22","26","32","40","50"], a:0},
+  {q:"A bag of 20 sweets costs £2.40. What is the cost of one sweet?", opts:["8p","10p","12p","15p","20p"], a:2},
+  {q:"What is the next number: 2, 5, 8, 11, ?", opts:["13","14","15","16","17"], a:1},
+  {q:"A cuboid is 5 cm × 4 cm × 3 cm. What is its volume?", opts:["12 cm³","20 cm³","35 cm³","60 cm³","120 cm³"], a:3},
+  {q:"£4.75 + £3.50 = ?", opts:["£7.25","£8.00","£8.25","£8.50","£9.00"], a:2},
+  {q:"What fraction of 60 is 15?", opts:["1/2","1/3","1/4","1/5","1/6"], a:2}
+];
+
+// 30 English
+const englishQ = [
+  {q:"Choose the correct spelling:", opts:["necessary","neccessary","necesary","neccesary"], a:0},
+  {q:"What is a synonym of 'brave'?", opts:["timid","courageous","fearful","cautious"], a:1},
+  {q:"What is an antonym of 'abundant'?", opts:["plentiful","scarce","rich","overflowing"], a:1},
+  {q:"In 'The clever fox jumped', what is the subject?", opts:["clever","fox","jumped","The"], a:1},
+  {q:"Choose the correct word: She ___ to school.", opts:["go","goes","going","gone"], a:1},
+  {q:"Past tense of 'eat'?", opts:["eated","ate","eaten","eating"], a:1},
+  {q:"Which is correct?", opts:["Their going.","They're going.","There going.","Theyre going."], a:1},
+  {q:"Identify the adjective: The tall building collapsed.", opts:["The","tall","building","collapsed"], a:1},
+  {q:"Plural of child?", opts:["childs","children","childes","childrens"], a:1},
+  {q:"Synonym of happy?", opts:["sad","joyful","angry","tired"], a:1},
+  {q:"Antonym of ancient?", opts:["old","modern","historic","aged"], a:1},
+  {q:"Which is a noun?", opts:["run","quickly","happiness","blue"], a:2},
+  {q:"Choose correct spelling:", opts:["receive","recieve","receve","receeve"], a:0},
+  {q:"Choose correct spelling:", opts:["separate","seperate","separete","seperete"], a:0},
+  {q:"Choose correct spelling:", opts:["definitely","definately","definitly","definetely"], a:0},
+  {q:"What is a synonym of 'quick'?", opts:["slow","rapid","heavy","quiet"], a:1},
+  {q:"In 'She carefully painted the picture', what is the verb?", opts:["She","carefully","painted","picture"], a:2},
+  {q:"Choose the correct sentence:", opts:["Me and him went.","Him and me went.","He and I went.","I and he went."], a:2},
+  {q:"What does 'benevolent' mean?", opts:["cruel","kind","angry","lazy"], a:1},
+  {q:"Antonym of 'expand'?", opts:["grow","contract","increase","enlarge"], a:1},
+  {q:"Read: The lighthouse stood on the rocky cliff. Every night the keeper lit the lamp. What did the keeper do every night?", opts:["Climbed to light the lamp","Painted the lighthouse","Sailed a ship","Slept"], a:0},
+  {q:"Which word is an adverb?", opts:["quickly","quick","quickness","quicken"], a:0},
+  {q:"Choose correct spelling:", opts:["accommodate","acommodate","accomodate","acomodate"], a:0},
+  {q:"Synonym of 'difficult'?", opts:["easy","hard","simple","plain"], a:1},
+  {q:"What is the object in 'Tom kicked the ball'?", opts:["Tom","kicked","the","ball"], a:3},
+  {q:"Choose correct: Neither of the boys ___ ready.", opts:["are","is","were","be"], a:1},
+  {q:"Antonym of 'generous'?", opts:["kind","stingy","giving","open"], a:1},
+  {q:"Which is correctly punctuated?", opts:["Its a nice day.","It's a nice day.","Its' a nice day.","It s a nice day."], a:1},
+  {q:"What type of word is 'because'?", opts:["noun","verb","conjunction","adjective"], a:2},
+  {q:"Choose correct spelling:", opts:["beautiful","beautifull","beutiful","beautifull"], a:0}
+];
+
+// 30 VR
+const vrQ = [
+  {q:"Move a letter from the first word to the second to make two new words.\nSTARTING   PEAL\nWhich letter?", opts:["S","G","I","T","A"], a:2},
+  {q:"Move two letters (order preserved) from first to second.\nORANGE   TILT\nWhich pair?", opts:["OA","RE","OE","AE","OG"], a:3},
+  {q:"Move two letters (order preserved).\nAPPLIED   SECT\nWhich pair?", opts:["AP","PL","AI","LI","PE"], a:4},
+  {q:"cork : buoyancy :: boulder : ______", opts:["draft","rock","submersion","adaptation","accuracy"], a:0},
+  {q:"rate : tear :: pace : ______", opts:["speed","tape","cape","cry","smile"], a:2},
+  {q:"petals : staple :: master : ______", opts:["stream","lord","reduces","pester","repeat"], a:0},
+  {q:"Connection: chef, teacher, plumber", opts:["doctor","expert","paint","apple","lead"], a:0},
+  {q:"Connection: hoof, toe, claw", opts:["sharp","run","wing","shoe","trotter"], a:2},
+  {q:"Connection: liver, bladder, kidney", opts:["intestines","vagaries","complications","buttress","bowls"], a:0},
+  {q:"big : small :: tall : ______", opts:["short","long","high","wide","thin"], a:0},
+  {q:"hot : cold :: wet : ______", opts:["damp","dry","rain","water","wetter"], a:1},
+  {q:"book : read :: song : ______", opts:["write","sing","hear","play","music"], a:1},
+  {q:"Move one letter: TRAMP   OIL → ?", opts:["A","T","R","M","P"], a:0},
+  {q:"Analogy: finger : hand :: toe : ______", opts:["foot","leg","nail","shoe","walk"], a:0},
+  {q:"Odd one out: apple, banana, carrot, grape", opts:["apple","banana","carrot","grape"], a:2},
+  {q:"Complete: 2, 4, 8, 16, ___", opts:["20","24","32","64","18"], a:2},
+  {q:"Which word is made by moving letters: STAR + TING", opts:["STARTING","STRING","RATING","STING"], a:0},
+  {q:"Analogy: day : night :: summer : ______", opts:["winter","spring","hot","cold","sun"], a:0},
+  {q:"Connection: red, blue, green", opts:["colour","shape","size","sound","taste"], a:0},
+  {q:"Move two letters: BRIGHT   END", opts:["BR","RI","IG","GH","HT"], a:0},
+  {q:"Which fits: pen, pencil, crayon", opts:["paper","desk","book","ruler","eraser"], a:4},
+  {q:"Analogy: kitten : cat :: puppy : ______", opts:["dog","bone","bark","puppy","animal"], a:0},
+  {q:"Sequence: A, C, E, G, ___", opts:["H","I","J","K","L"], a:1},
+  {q:"Move letter: CLOUD   RAIN → ?", opts:["C","L","O","U","D"], a:0},
+  {q:"Which is the opposite of 'generous'?", opts:["kind","mean","giving","rich"], a:1},
+  {q:"Complete the pair: fish : water :: bird : ______", opts:["air","tree","nest","sky","wing"], a:0},
+  {q:"Odd one: square, circle, triangle, cube", opts:["square","circle","triangle","cube"], a:3},
+  {q:"Analogy: doctor : hospital :: teacher : ______", opts:["school","book","class","pupil","lesson"], a:0},
+  {q:"Move two: APPLE   PIE", opts:["AP","PP","PL","LE","PE"], a:0},
+  {q:"Connection: Monday, Tuesday, Wednesday", opts:["days","months","seasons","years","weeks"], a:0}
+];
+
+// 30 NVR (text descriptions of patterns)
+const nvrQ = [
+  {q:"A 3D stack of cubes is shown. Which option best represents the 2D view from above?", opts:["Grid A","Grid B","Grid C","Grid D","Grid E"], a:1},
+  {q:"Which shape completes the sequence: circle, square, circle, square, ?", opts:["circle","square","triangle","hexagon"], a:0},
+  {q:"Two shapes are alike (both have a small circle inside). Which is most like them?", opts:["Plain rectangle","Shape with a dot inside","Plain circle","Plain hexagon"], a:1},
+  {q:"Pattern: 1 ring, 2 rings, 3 rings, ?", opts:["4 rings","plain circle","square","triangle"], a:0},
+  {q:"Which is the odd one out? (All others are pointed at the top)", opts:["Triangle","Arrow up","Circle","Pentagon"], a:2},
+  {q:"Sequence of arrows: ↑ ↑ ↓ ↑ ↑ ↓ ?", opts:["↑","↓","←","→"], a:0},
+  {q:"A cube is rotated 90° clockwise. Which view matches?", opts:["View A","View B","View C","View D"], a:1},
+  {q:"Which figure has rotational symmetry of order 4?", opts:["Triangle","Square","Rectangle","Oval"], a:1},
+  {q:"Pattern: filled, open, filled, open, ?", opts:["filled","open","half","none"], a:0},
+  {q:"Two figures both have a curved top. Which matches?", opts:["Square","Shape with curved top","Triangle","Rectangle"], a:1},
+  {q:"Which net folds into a cube?", opts:["Net A","Net B","Net C","Net D"], a:0},
+  {q:"Sequence: triangle, square, pentagon, ?", opts:["hexagon","circle","octagon","rectangle"], a:0},
+  {q:"A shape is reflected. Which is the mirror image?", opts:["Image A","Image B","Image C","Image D"], a:1},
+  {q:"Which shape has exactly 3 lines of symmetry?", opts:["Square","Equilateral triangle","Rectangle","Circle"], a:1},
+  {q:"Pattern of dots: 1, 3, 5, ?", opts:["6","7","8","9"], a:1},
+  {q:"Which completes: small, medium, large, ?", opts:["tiny","huge","medium","small"], a:1},
+  {q:"Two shapes are both tall and thin. Which is most like them?", opts:["Wide square","Tall rectangle","Circle","Triangle"], a:1},
+  {q:"A figure is rotated 180°. Which matches?", opts:["A","B","C","D"], a:2},
+  {q:"Which is the odd one? (Others have 4 sides)", opts:["Square","Rectangle","Rhombus","Pentagon"], a:3},
+  {q:"Sequence: black, white, black, white, ?", opts:["black","white","grey","red"], a:0},
+  {q:"Which shape can be folded to make a pyramid?", opts:["Net A","Net B","Net C","Net D"], a:1},
+  {q:"Pattern: arrow right, arrow left, arrow right, ?", opts:["left","right","up","down"], a:0},
+  {q:"Two figures both contain a filled circle. Which is similar?", opts:["Empty shape","Shape with filled circle","Plain line","Dotted shape"], a:1},
+  {q:"Which has the most sides?", opts:["Triangle","Square","Pentagon","Hexagon"], a:3},
+  {q:"A cube has a circle on the front. After 90° turn, where is the circle?", opts:["Front","Side","Back","Top"], a:1},
+  {q:"Which completes the analogy: circle is to round as square is to ?", opts:["pointed","straight","curved","round"], a:1},
+  {q:"Sequence of lines: |  ||  |||  ?", opts:["||||","|","—","△"], a:0},
+  {q:"Which shape is a reflection of the original?", opts:["A","B","C","D"], a:0},
+  {q:"Odd one out: all others are regular polygons", opts:["Equilateral triangle","Square","Regular pentagon","Rectangle"], a:3},
+  {q:"Which 2D view matches the top of a stepped cube stack?", opts:["View 1","View 2","View 3","View 4","View 5"], a:1}
+];
+
+const banks = {maths: mathsQ, english: englishQ, vr: vrQ, nvr: nvrQ};
+const subjectNames = {maths:"Mathematics", english:"English", vr:"Verbal Reasoning", nvr:"Non-Verbal Reasoning"};
+
+function showLogin() {
+  document.getElementById("nav").innerHTML = "";
+  document.getElementById("app").innerHTML = `
+    <div class="card">
+      <h1>Student / Admin Login</h1>
+      <label>Username</label><input id="user" autocomplete="username">
+      <label>Password</label><input id="pass" type="password" autocomplete="current-password">
+      <button class="btn" onclick="doLogin()">Login</button>
+      <p style="margin-top:16px;color:#64748b;font-size:.9rem">Admin: moonzhu / moonprep</p>
+    </div>`;
+}
+
+function doLogin() {
+  const u = document.getElementById("user").value.trim();
+  const p = document.getElementById("pass").value;
+  if (users[u] && users[u].password === p) {
+    currentUser = u;
+    showHome();
+  } else {
+    alert("Invalid username or password");
+  }
+}
+
+function showHome() {
+  const isAdmin = users[currentUser].role === "admin";
+  document.getElementById("nav").innerHTML = `
+    <span>Hi, ${currentUser}</span>
+    <a onclick="showHome()">Home</a>
+    ${isAdmin ? '<a onclick="showAdmin()">Admin</a>' : ""}
+    <a onclick="logout()">Logout</a>`;
+  document.getElementById("app").innerHTML = `
+    <div class="card">
+      <h1>ISEB Mock Tests</h1>
+      <p>Select a subject. Each test has 30 questions and a 15-minute timer. You can review answers afterwards.</p>
+      <button class="btn" style="display:block;width:100%;margin:8px 0" onclick="startTest('maths')">Mathematics</button>
+      <button class="btn" style="display:block;width:100%;margin:8px 0" onclick="startTest('english')">English</button>
+      <button class="btn" style="display:block;width:100%;margin:8px 0" onclick="startTest('vr')">Verbal Reasoning</button>
+      <button class="btn" style="display:block;width:100%;margin:8px 0" onclick="startTest('nvr')">Non-Verbal Reasoning</button>
+    </div>`;
+}
+
+function showAdmin() {
+  if (users[currentUser].role !== "admin") return;
+  document.getElementById("app").innerHTML = `
+    <div class="card">
+      <h2>Create Student Account</h2>
+      <label>Username</label><input id="newuser">
+      <label>Password</label><input id="newpass" type="password">
+      <label>Display name</label><input id="newname">
+      <button class="btn" onclick="createStudent()">Create Student</button>
+      <h3 style="margin-top:24px">Existing students</h3>
+      <div id="studentlist"></div>
+      <button class="btn btn-sec" style="margin-top:16px" onclick="showHome()">Back</button>
+    </div>`;
+  renderStudents();
+}
+
+function createStudent() {
+  const u = document.getElementById("newuser").value.trim();
+  const p = document.getElementById("newpass").value;
+  const n = document.getElementById("newname").value.trim() || u;
+  if (!u || !p) { alert("Username and password required"); return; }
+  if (users[u]) { alert("Username already exists"); return; }
+  users[u] = {password:p, role:"student", name:n};
+  saveUsers();
+  alert("Student created");
+  showAdmin();
+}
+
+function renderStudents() {
+  const list = document.getElementById("studentlist");
+  let html = "";
+  for (const [u, data] of Object.entries(users)) {
+    if (data.role === "student") html += `<p>${u} (${data.name})</p>`;
+  }
+  list.innerHTML = html || "<p>No students yet.</p>";
+}
+
+function startTest(sub) {
+  currentSubject = sub;
+  questions = banks[sub].slice(0, 30);
+  currentIndex = 0;
+  userAnswers = new Array(questions.length).fill(null);
+  score = 0;
+  timeLeft = 15 * 60;
+  clearInterval(timer);
+  timer = setInterval(tick, 1000);
+  loadQuestion();
+}
+
+function tick() {
+  timeLeft--;
+  if (timeLeft <= 0) {
+    clearInterval(timer);
+    finishTest();
+  } else {
+    const el = document.getElementById("timer");
+    if (el) {
+      const m = Math.floor(timeLeft/60);
+      const s = timeLeft % 60;
+      el.textContent = `${m}:${s.toString().padStart(2,"0")}`;
+    }
+  }
+}
+
+function loadQuestion() {
+  if (currentIndex >= questions.length) { finishTest(); return; }
+  const q = questions[currentIndex];
+  const pct = (currentIndex / questions.length) * 100;
+  document.getElementById("app").innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between">
+        <strong>${subjectNames[currentSubject]}</strong>
+        <span class="timer" id="timer">${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,"0")}</span>
+      </div>
+      <div style="margin:8px 0">${currentIndex+1} / ${questions.length}</div>
+      <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="q-text" style="white-space:pre-wrap;margin:16px 0">${q.q}</div>
+      <div id="opts"></div>
+      <button class="btn" id="next" disabled onclick="nextQ()">Next</button>
+    </div>`;
+  const opts = document.getElementById("opts");
+  q.opts.forEach((opt, i) => {
+    const d = document.createElement("div");
+    d.className = "opt";
+    d.textContent = opt;
+    d.onclick = () => {
+      document.querySelectorAll(".opt").forEach(o => o.classList.remove("selected"));
+      d.classList.add("selected");
+      userAnswers[currentIndex] = i;
+      document.getElementById("next").disabled = false;
+    };
+    opts.appendChild(d);
+  });
+}
+
+function nextQ() {
+  if (userAnswers[currentIndex] === questions[currentIndex].a) score++;
+  currentIndex++;
+  loadQuestion();
+}
+
+function finishTest() {
+  clearInterval(timer);
+  let html = `<div class="card"><h2>${subjectNames[currentSubject]} – Results</h2>
+    <p class="score" style="font-size:2rem;font-weight:700;color:#2563eb">${score} / ${questions.length}</p>
+    <p>Time remaining when finished: ${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,"0")}</p>
+    <button class="btn" onclick="showReview()">Review Answers</button>
+    <button class="btn btn-sec" onclick="showHome()">Back to Home</button></div>`;
+  document.getElementById("app").innerHTML = html;
+}
+
+function showReview() {
+  let html = `<div class="card"><h2>Review – ${subjectNames[currentSubject]}</h2>`;
+  questions.forEach((q, i) => {
+    const chosen = userAnswers[i];
+    const correct = q.a;
+    html += `<div style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:8px">
+      <strong>Q${i+1}.</strong> ${q.q.replace(/\n/g,"<br>")}<br><br>`;
+    q.opts.forEach((opt, j) => {
+      let cls = "opt";
+      if (j === correct) cls += " correct";
+      if (j === chosen && j !== correct) cls += " wrong";
+      html += `<div class="${cls}">${opt}</div>`;
+    });
+    html += `</div>`;
+  });
+  html += `<button class="btn" onclick="showHome()">Back to Home</button></div>`;
+  document.getElementById("app").innerHTML = html;
+}
+
+function logout() {
+  currentUser = null;
+  clearInterval(timer);
+  showLogin();
+}
+
+showLogin();
+</script>
+</body>
+</html>
